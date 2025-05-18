@@ -1,5 +1,6 @@
 # Agente_de_Saude
 Chatbot de Agente de Saúde construído no Colab usando Genai, Google Search e Google Maps.
+O resultado desse agente é listar os locais de saúde mais próximos de um paciente, de acordo ou não com seu plano de saúde.
 
 Funcionamento:
 
