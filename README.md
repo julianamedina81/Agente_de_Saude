@@ -2,7 +2,7 @@
 Chatbot de Agente de Saúde construído no Colab usando Genai, Google Search e Google Maps.
 
 
-Resultado Final: Listar os locais de saúde mais próximos de um paciente, de acordo com sua necessidade médica, localidade e plano de saúde, se tiver.
+Resultado Final: Listar os locais de saúde mais próximos de um paciente de acordo com sua necessidade médica, localidade e plano de saúde, se tiver, e outros detalhes que o paciente (usuário) desejar informar. Apresentando telefone, endereço e também link do Google Maps.
 
 Funcionamento:
 
