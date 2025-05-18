@@ -1,0 +1,207 @@
+# Framework Genai
+!pip install google-genai
+
+# Framework ADK
+!pip install -q google-adk
+
+# Importar bibliotecas
+import os
+from google.colab import userdata
+os.environ['GOOGLE_API_KEY'] = userdata.get('GOOGLE_API_KEY')
+from google import genai
+
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools import google_search
+
+from google.genai import types # para criar conteúdos (content e part)
+from datetime import date
+import textwrap # para formatar melhor a saída do texto
+from IPython.display import display, Markdown # para exibir texto formatado no colab
+import requests # para fazer requisições HTTP
+import warnings
+warnings.filterwarnings("ignore")
+
+# Função auxiliar que envia uma msg para um agente via runner e retorna a resposta final
+def call_agent(agent: Agent, message_text: str) -> str:
+  #cria um serviço de sessão em memória
+  session_service = InMemorySessionService()
+  #cria uma nova sessão (vc pode personalizar os ids)
+  session = session_service.create_session(app_name=agent.name,user_id="user1",session_id="session1")
+  #cria um runner para o agente
+  runner = Runner(agent=agent,app_name=agent.name,session_service=session_service)
+  #cria o conteúdo da msg de entrada
+  content = types.Content(role="user", parts=[types.Part(text=message_text)])
+
+  final_response = ""
+  #intera assincronamente pelos eventos retornados durante a execução do agente
+  for event in runner.run(user_id="user1",session_id="session1",new_message=content):
+    if event.is_final_response():
+      for part in event.content.parts:
+        if part.text is not None:
+          final_response += part.text
+          final_response += "\n"
+  return final_response
+
+# função auxiliar para exibir texto formatado no colab
+def to_markdown(text):
+  #text = text.replace("", "")
+  return Markdown(textwrap.indent(text, '> ',predicate=lambda _:True))
+
+#####################################
+# Agente Buscador de Locais de Saúde
+#####################################
+def agente_buscador(promptTipo, promptEndereco, promptPlano, promptDetalhe, promptExtra):
+  buscador = Agent(
+      name = "agente_buscador",
+      model = "gemini-2.0-flash",
+      description = "Agente que busca informações no Google",
+      tools = [google_search],
+      instruction = f"""
+      Você é um assistente de pesquisa. A sua tarefa é usar a ferramenta de pesquisa do Google (google_research)
+      para encontrar locais de saúde para um paciente que precisa de uma {promptTipo}.
+      Foque em no máximo 9 locais mais próximos, ordenando por proximidade, com base no endereço {promptEndereco}.
+      e que aceitem o plano de saúde do paciente, se for informado, senão liste somente locais de saúde da rede pública e privada.
+      Sobre o plano de saúde o paciente informou: {promptPlano}.
+      Se o paciente informou um plano de saúde e se não houver locais de saúde que aceitem o plano de saúde
+      próximos a 5km do endereço, informe também os locais de saúde da rede pública.
+      Além disso, os locais de saúde precisam atender os detalhes sobre a especialidade médica ou problema de saúde
+      informados pelo paciente: {promptDetalhe}.
+      Você não deve perguntar nada, nem pedir mais informações, mesmo se o paciente esquecer de informar algo. 
+      Não deve nem pedir confirmação para dar uma resposta. 
+      Trabalhe apenas com as informações fornecidas para sempre oferecer uma resposta mesmo que seja insuficiente.
+      E ao final da resposta, ofereça a opção de exportar ou compartilhar esse texto.
+      Você deve também usar o @Google Maps (google_maps) para mostrar o link da localização de cada local de saúde.
+      Tendo o cuidado para não mostrar link que não sejam válidos. 
+      Ou seja, os links do google maps precisam estar funcionando para cada local.
+      ####
+      A resposta precisa ser clara e direta, como se falasse para uma pessoa que está com muita pressa, usado o seguinte formato:
+
+      Locais de Saúde que aceitam o plano de saúde:
+      - Local 1: telefone (endereço) - link do Local 1 no Google Maps
+      - Local 2: telefone (endereço) - link do Local 2 no Google Maps
+      - Local 3: telefone (endereço) - link do Local 3 no Google Maps
+
+      Locais de Saúde da rede pública:
+      - Local 4: telefone (endereço) - link do Local 4 no Google Maps
+      - Local 5: telefone (endereço) - link do Local 5 no Google Maps
+      - Local 6: telefone (endereço) - link do Local 6 no Google Maps
+
+      Locais de Saúde da privada:
+      - Local 7: telefone (endereço) - link do Local 7 no Google Maps
+      - Local 8: telefone (endereço) - link do Local 8 no Google Maps
+      - Local 9: telefone (endereço) - link do Local 9 no Google Maps
+
+      Recomendações:
+      - recomendação 1
+      - recomendação 2
+      - recomendação 3
+
+      ####
+      """
+  )
+  if not promptExtra:
+    entrada_do_agente_buscador = f"O paciente não ficou satisfeito com a última resposta, e pediu o seguinte: {promptExtra}"
+  else:
+    entrada_do_agente_buscador = ""
+
+  resposta = call_agent(buscador,entrada_do_agente_buscador)
+
+  return resposta
+
+  
+
+##########################
+# chatbot Agentes de Saúde
+##########################
+promptFinal = "1"
+
+while promptFinal != "2":
+
+  print("\n🧑‍⚕️Agente de Saúde: Olá, estou pronto para buscar locais de saúde mais próximos e adequados para você ou alguém que você deseja cuidar.\n\nQual é necessidade do paciente?\n")
+  print("1 - Emergência médica\n2 - Consulta médica\n3 - Outros serviços médicos\n")
+  prompt = input("🙋Paciente: ")
+
+  while (prompt != "1" and prompt != "2" and prompt != "3"):
+    print("\n🧑‍⚕️Agente de Saúde: Por favor, informe uma opção válida.\n")
+    print("1 - Emergência médica\n2 - Consulta médica\n3 - Outros serviços médicos\n")
+    prompt = input("🙋Paciente: ")
+    
+  if prompt == "1":
+    promptTipo = "emergência médica"
+    print("\n🧑‍⚕️Agente de Saúde: Em uma emergência médica é normal ficarmos nervosos, mas fique tranquilo que iremos ajudar rapidamente...")
+  else:
+    if prompt == "2":
+      promptTipo = "consulta médica"
+      print("\n🧑‍⚕️Agente de Saúde: Ótimo, uma consulta médica é sinal de cuidado e atenção com o paciente e sua família...")
+    else:
+      promptTipo = "outros serviços médicos"
+      print("\n🧑‍⚕️Agente de Saúde: Compreendo que há outros serviços médicos como exames, procedimetos, etc... Deseja expecificar qual serviço?\n")
+      prompt = input("🙋Paciente: ")
+      if prompt:
+        promptTipo = promptTipo + prompt
+
+  print("\n🧑‍⚕️Agente de Saúde: Qual especialidade médica ou problema de saúde?\n")
+  promptDetalhe = input("🙋Paciente:")
+
+  while not promptDetalhe:
+    print("\n🧑‍⚕️Agente de Saúde: Qual especialidade médica ou problema de saúde?\n")
+    promptEndereco = input("🙋Paciente:") 
+
+  print("\n🧑‍⚕️Agente de Saúde: Qual seria a localidade (cidade/rua/bairro)?\n")
+  promptEndereco = input("🙋Paciente:")
+
+  while not promptEndereco:
+    print("\n🧑‍⚕️Agente de Saúde: Precisamos ao menos da rua e cidade.\n")
+    promptEndereco = input("🙋Paciente:") 
+
+  print("\n🧑‍⚕️Agente de Saúde: O paciente tem plano de saúde? Se sim, informe qual.\n")
+  promptPlano = input("🙋Paciente:")
+
+  print(f"\n🧑‍⚕️Agente de Saúde: Pronto, agora iremos buscar os locais de saúde de {promptTipo} de acordo com as suas informações.\n\n")
+  
+  promptExtra = ""
+
+  while promptExtra != "1":
+    resposta = agente_buscador(promptTipo,promptEndereco,promptPlano,promptDetalhe,promptExtra)
+    print("\n🏥Segue o resultado: \n\n")
+    display(to_markdown(resposta))
+    print("\n\n----------------------------------------------\n\n")
+    print("\n🧑‍⚕️Agente de Saúde: Consegui te atender?\n")
+    print("1 - Sim\n2 - Não\n")
+    promptExtra = input("🙋Paciente: ")
+    while promptExtra != "1" and promptExtra != "2":
+      print("\n🧑‍⚕️Agente de Saúde: Consegui te atender?\n")
+      print("1 - Sim\n2 - Não\n")
+      promptExtra = input("🙋Paciente:") 
+    if promptExtra == "1":
+      break
+    print("\n🧑‍⚕️Agente de Saúde: Quer fazer um novo atendimento?\n")
+    print("1 - Sim\n2 - Não\n")
+    promptExtra = input("🙋Paciente: ") 
+    while promptExtra != "1" and promptExtra != "2":
+      print("\n🧑‍⚕️Agente de Saúde: Quer fazer um novo atendimento?\n")
+      print("1 - Sim\n2 - Não\n")
+      promptExtra = input("🙋Paciente:") 
+    if promptExtra == "1":
+      promptFinal = "0"
+      break
+    print("\n🧑‍⚕️Agente de Saúde: Compreendo, vou continuar aqui neste atendimento para te ajudar. Informe mais o que o paciente precisa...\n")
+    promptExtra = input("🙋Paciente: ")
+    while not promptExtra:
+      print("\n🧑‍⚕️Agente de Saúde: Informe mais o que o paciente precisa...\n")
+      promptEndereco = input("🙋Paciente:") 
+
+
+  if promptFinal == "1":
+    print("\n🧑‍⚕️Agente de Saúde: Quer fazer um novo atendimento?\n")
+    print("1 - Sim\n2 - Não\n")
+    promptFinal = input("🙋Paciente: ")
+    if promptFinal == "2":
+      print("\n🧑‍⚕️Agente de Saúde: Tchau! Muita saúde e paz!")
+      break
+  else:
+    promptFinal = "1"
+
+
